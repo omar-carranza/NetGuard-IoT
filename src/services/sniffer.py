@@ -5,7 +5,7 @@ import os
 INTERFACE = "Wi-Fi"
 
 # HTTP
-TARGET_IP = "192.168.1.2"
+TARGET_IP = "10.129.176.217"
 TARGET_PORT_HTTP = 5000
 TARGET_PATH = "/motion"
 
@@ -123,23 +123,16 @@ def procesar_paquete(packet):
             f"Pld: {info}"
         )
 
-        print(linea)
-
+        # print(linea)
         with open(LOG_FILE, "a", encoding="utf-8") as log:
 
             log.write(linea + "\n")
 
 def main():
-
-    # print("=" * 100)
-
-    # print(" NETGUARD-IOT SNIFFER ")
-
-    # print("=" * 100)
-
-    # print(f"\nInterfaz: {INTERFACE}")
-
-    # print("Capturando tráfico IoT...\n")
+    print("")
+    print("NETGUARD-IOT SNIFFER ")
+    print("")
+    print("Capturando tráfico IoT....\n")
 
     # FILTRO BPF
     filtro_bpf = "tcp port 8080 or udp port 9090 or tcp port 5000"
@@ -147,22 +140,15 @@ def main():
     try:
 
         sniff(
-
             iface=INTERFACE,
-
             filter=filtro_bpf,
-
             prn=procesar_paquete,
-
             store=0
-
         )
 
     except KeyboardInterrupt:
-
         print("\nCaptura detenida")
 
 
 if __name__ == "__main__":
-
     main()

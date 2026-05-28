@@ -17,6 +17,7 @@ UDP_PORT = 9090
 HTTP_PORT = 5000
 
 app = Flask(__name__)
+
 if FLASK_CORS:
     CORS(app)
 
@@ -34,25 +35,18 @@ def handle_options():
         return Response(status=200)
 
 # ─── State ────────────────────────────────────────────────
-authorized_macs  = ["94:e3:ee:45:d4:86"]
-devices_detected = []   # todos los detectados (pending o aprobados)
+authorized_macs = ["94:e3:ee:45:d4:86"]
+devices_detected = []
 alerts_detected  = []
+
+# Traffic history: list of {timestamp, bytes_sent, bytes_recv, mbps_out, mbps_in}
 traffic_history  = []
 _prev_net        = None
 _prev_time       = None
 
-# Distribución de protocolos — actualizada por el analyzer
-protocol_stats = {
-    "http":  0.0,
-    "tcp":   0.0,
-    "udp":   0.0,
-    "other": 0.0,
-    "total": 0,
-    "updated_at": None,
-}
-
 # ─── Traffic Sampling ─────────────────────────────────────
 def sample_traffic():
+    """Corre en background, muestrea tráfico de red cada segundo."""
     global _prev_net, _prev_time, traffic_history
     while True:
         try:
@@ -74,6 +68,7 @@ def sample_traffic():
                         "bytes_recv_total": counters.bytes_recv,
                     }
                     traffic_history.append(entry)
+                    # Keep last 5 minutes (300 samples at 1/s)
                     if len(traffic_history) > 300:
                         traffic_history.pop(0)
             _prev_net  = counters
@@ -86,109 +81,73 @@ def sample_traffic():
 
 @app.route('/traffic', methods=['GET'])
 def get_traffic():
+    """
+    Retorna el historial de tráfico de red en tiempo real.
+    Query param: ?limit=60  (últimas N muestras, default 60)
+    """
     limit = int(request.args.get('limit', 60))
-    data  = traffic_history[-limit:] if len(traffic_history) >= limit else traffic_history[:]
-    counters    = psutil.net_io_counters()
+    data = traffic_history[-limit:] if len(traffic_history) >= limit else traffic_history[:]
+    
+    # Totales acumulados desde inicio del proceso
+    counters = psutil.net_io_counters()
     total_bytes = counters.bytes_sent + counters.bytes_recv
+    total_tb    = round(total_bytes / 1e12, 3)
+    total_gb    = round(total_bytes / 1e9,  2)
+    
+    # Ancho de banda actual (último sample)
     current_mbps_out = data[-1]['mbps_out'] if data else 0
     current_mbps_in  = data[-1]['mbps_in']  if data else 0
+    current_mbps     = round(current_mbps_out + current_mbps_in, 2)
+
     return jsonify({
         "history":       data,
-        "total_tb":      round(total_bytes / 1e12, 3),
-        "total_gb":      round(total_bytes / 1e9,  2),
-        "current_mbps":  round(current_mbps_out + current_mbps_in, 2),
+        "total_tb":      total_tb,
+        "total_gb":      total_gb,
+        "current_mbps":  current_mbps,
         "mbps_out":      current_mbps_out,
         "mbps_in":       current_mbps_in,
         "samples":       len(data),
     })
 
-# ─── Protocol stats (enviado por analyzer) ────────────────
-@app.route('/protocol-stats', methods=['POST'])
-def receive_protocol_stats():
-    """
-    El analyzer envía:
-    { "http": 45.2, "tcp": 30.1, "udp": 18.3, "other": 6.4, "total": 320 }
-    """
-    data = request.get_json()
-    protocol_stats.update({
-        "http":       round(float(data.get("http",  0)), 2),
-        "tcp":        round(float(data.get("tcp",   0)), 2),
-        "udp":        round(float(data.get("udp",   0)), 2),
-        "other":      round(float(data.get("other", 0)), 2),
-        "total":      int(data.get("total", 0)),
-        "updated_at": time.strftime("%H:%M:%S"),
+@app.route('/stats', methods=['GET'])
+def get_stats():
+    """Resumen general: tráfico, dispositivos, alertas."""
+    counters = psutil.net_io_counters()
+    total_bytes = counters.bytes_sent + counters.bytes_recv
+    current = traffic_history[-1] if traffic_history else {}
+    return jsonify({
+        "devices_count": len(devices_detected),
+        "alerts_count":  len(alerts_detected),
+        "total_bytes":   total_bytes,
+        "total_gb":      round(total_bytes / 1e9, 2),
+        "total_tb":      round(total_bytes / 1e12, 3),
+        "current_mbps":  current.get('mbps_out', 0) + current.get('mbps_in', 0),
+        "mbps_out":      current.get('mbps_out', 0),
+        "mbps_in":       current.get('mbps_in', 0),
     })
-    print(f"\n[PROTOCOL STATS] {protocol_stats}")
-    return jsonify({"status": "ok"})
 
-@app.route('/protocol-stats', methods=['GET'])
-def get_protocol_stats():
-    return jsonify(protocol_stats)
-
-# ─── Motion ───────────────────────────────────────────────
 @app.route('/motion', methods=['POST'])
 def motion():
     data = request.json
     print("\n[HTTP MOTION]", data)
     return jsonify({"status": "OK"})
 
-# ─── Devices ──────────────────────────────────────────────
 @app.route('/device', methods=['POST'])
 def receive_device():
-    data    = request.get_json()
-    mac_src = data.get("mac_src")
-    # Si ya está registrado este MAC, no duplicar
-    for d in devices_detected:
-        if d.get("mac_src") == mac_src:
-            return jsonify({"approved": d.get("approved", False), "duplicate": True})
-    approved = mac_src in authorized_macs
+    data      = request.get_json()
+    mac_src   = data.get("mac_src")
+    approved  = mac_src in authorized_macs
     device_info = {
         "timestamp": data.get("timestamp"),
         "event":     data.get("event"),
         "mac_src":   mac_src,
         "mac_dst":   data.get("mac_dst"),
-        "ip_src":    data.get("ip_src", None),
         "approved":  approved,
-        "status":    "approved" if approved else "pending",
     }
     devices_detected.append(device_info)
     print("\n[DEVICE]", device_info)
     return jsonify({"approved": approved})
 
-@app.route('/approve', methods=['POST'])
-def approve_device():
-    data = request.get_json()
-    mac  = data.get("mac")
-    if not mac:
-        return jsonify({"status": "error", "message": "MAC requerida"}), 400
-    if mac not in authorized_macs:
-        authorized_macs.append(mac)
-    for d in devices_detected:
-        if d.get("mac_src") == mac:
-            d["approved"] = True
-            d["status"]   = "approved"
-    print(f"\n[APPROVED] {mac}")
-    return jsonify({"status": "approved", "mac": mac})
-
-@app.route('/ignore', methods=['POST'])
-def ignore_device():
-    """Marca el dispositivo como ignorado (no aprobado, no pendiente)."""
-    data = request.get_json()
-    mac  = data.get("mac")
-    if not mac:
-        return jsonify({"status": "error", "message": "MAC requerida"}), 400
-    for d in devices_detected:
-        if d.get("mac_src") == mac:
-            d["approved"] = False
-            d["status"]   = "ignored"
-    print(f"\n[IGNORED] {mac}")
-    return jsonify({"status": "ignored", "mac": mac})
-
-@app.route('/devices', methods=['GET'])
-def get_devices():
-    return jsonify(devices_detected)
-
-# ─── Alerts ───────────────────────────────────────────────
 @app.route('/alert', methods=['POST'])
 def receive_alert():
     data  = request.get_json()
@@ -204,9 +163,29 @@ def receive_alert():
         alert_info["syn_packets"]    = data.get("syn_packets")
     elif event == "PORT_SCAN":
         alert_info["ports_detected"] = data.get("ports_detected")
+
     alerts_detected.append(alert_info)
     print(f"\n[{event}]", alert_info)
     return jsonify({"status": "received", "event": event})
+
+@app.route('/approve', methods=['POST'])
+def approve_device():
+    data = request.get_json()
+    mac  = data.get("mac")
+    if not mac:
+        return jsonify({"status": "error", "message": "MAC requerida"}), 400
+    if mac not in authorized_macs:
+        authorized_macs.append(mac)
+    # Actualizar el estado en devices_detected
+    for d in devices_detected:
+        if d.get("mac_src") == mac:
+            d["approved"] = True
+    print(f"\n[APPROVED] {mac}")
+    return jsonify({"status": "approved", "mac": mac})
+
+@app.route('/devices', methods=['GET'])
+def get_devices():
+    return jsonify(devices_detected)
 
 @app.route('/alerts', methods=['GET'])
 def get_alerts():
@@ -216,22 +195,7 @@ def get_alerts():
 def get_authorized():
     return jsonify(authorized_macs)
 
-@app.route('/stats', methods=['GET'])
-def get_stats():
-    counters    = psutil.net_io_counters()
-    total_bytes = counters.bytes_sent + counters.bytes_recv
-    current     = traffic_history[-1] if traffic_history else {}
-    approved_count = sum(1 for d in devices_detected if d.get("approved"))
-    return jsonify({
-        "devices_count":  len(devices_detected),
-        "approved_count": approved_count,
-        "alerts_count":   len(alerts_detected),
-        "total_gb":       round(total_bytes / 1e9, 2),
-        "total_tb":       round(total_bytes / 1e12, 3),
-        "current_mbps":   current.get('mbps_out', 0) + current.get('mbps_in', 0),
-    })
-
-# ─── TCP / UDP Servers ────────────────────────────────────
+# ─── TCP / UDP ─────────────────────────────────────────────
 def tcp_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -239,8 +203,9 @@ def tcp_server():
     print(f"[TCP] Puerto {TCP_PORT}")
     while True:
         client, addr = s.accept()
+        print(f"[TCP] Conexión {addr}")
         data = client.recv(1024).decode()
-        print(f"[TCP] {addr}: {data}")
+        print(data)
         client.send(b"ACK\n"); client.close()
 
 def udp_server():
@@ -255,5 +220,7 @@ if __name__ == '__main__':
     for target in [tcp_server, udp_server, sample_traffic]:
         t = threading.Thread(target=target)
         t.daemon = True; t.start()
+
     print(f"[HTTP] Puerto {HTTP_PORT}")
+    print(f"[CORS] {'flask-cors' if FLASK_CORS else 'manual headers'}")
     app.run(host='0.0.0.0', port=HTTP_PORT, debug=False)

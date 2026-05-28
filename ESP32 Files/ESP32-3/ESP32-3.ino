@@ -21,7 +21,7 @@ IPAddress subnet(255,255,255,0);
 // ===============================
 
 // ENDPOINT HTTP DEL SERVIDOR
-const char* serverURL = "http://192.168.1.2:5000/motion";
+const char* serverURL = "http://10.129.176.217:5000/motion";
 
 // ===============================
 // SETUP

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetMonitor</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css" />
+
+  <style>
+    .swal2-popup  { font-family: 'Inter', sans-serif !important; }
+    .swal2-title  { font-size: 16px !important; font-weight: 600 !important; }
+    .swal2-confirm, .swal2-deny, .swal2-cancel {
+      font-size: 13px !important; border-radius: 6px !important; padding: 8px 18px !important;
+    }
+    .swal2-timer-progress-bar { background: #4493f8 !important; }
+  </style>
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="fas fa-broadcast-tower"></i></div>
+      <div class="logo-text">
+        <h1>NetMonitor</h1>
+        <span>Monitoreo de Redes</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Principal</div>
+      <a class="nav-item active" data-section="dashboard" href="#">
+        <i class="fas fa-chart-line"></i> Dashboard
+      </a>
+      <a class="nav-item" data-section="devices" href="#">
+        <i class="fas fa-network-wired"></i> Dispositivos
+      </a>
+      <a class="nav-item" data-section="alerts" href="#">
+        <i class="fas fa-shield-halved"></i> Alertas
+        <span class="nav-badge" id="nav-alerts-badge">0</span>
+      </a>
+
+      <div class="nav-section-label" style="margin-top:6px">Sistema</div>
+      <a class="nav-item" href="#" onclick="showApiInfo(); return false;">
+        <i class="fas fa-plug-circle-bolt"></i> API Flask
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="system-status">
+        <div class="status-row">
+          <span class="status-label">Estado</span>
+          <span style="display:flex;align-items:center;gap:6px">
+            <span class="status-dot"></span>
+            <span class="status-value">Operativo</span>
+          </span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Activo</span>
+          <span class="status-sub" id="uptime-display">00h 00m 00s</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Última act.</span>
+          <span class="status-sub" id="last-update">—</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main-content">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h2 id="topbar-title">Dashboard</h2>
+        <p id="topbar-sub">Resumen general del estado de la red</p>
+      </div>
+      <div class="topbar-right">
+        <div class="conn-bar disconnected" id="conn-bar">
+          <i class="fas fa-circle-notch fa-spin"></i> Conectando...
+        </div>
+        <div class="topbar-date">
+          <i class="far fa-calendar"></i>
+          <span id="datetime-display">—</span>
+        </div>
+        <div class="topbar-btn" id="refresh-btn" title="Actualizar">
+          <i class="fas fa-rotate-right"></i>
+        </div>
+        <div class="topbar-btn" title="Alertas" onclick="navigateTo('alerts')" style="position:relative">
+          <i class="fas fa-bell"></i>
+          <span class="notif-badge" id="topbar-alert-badge" style="display:none">0</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-avatar"><i class="fas fa-user-shield"></i></div>
+          <div class="user-info">
+            <p>Admin</p>
+            <span>Administrador</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- PAGE CONTENT -->
+    <div class="page-content">
+
+      <!-- ═══════════════════════ DASHBOARD ═══════════════════════ -->
+      <section class="page-section active" id="section-dashboard">
+
+        <!-- Stats cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue"><i class="fas fa-desktop"></i></div>
+            <div class="stat-info">
+              <div class="stat-label">Dispositivos Autorizados</div>
+              <div class="stat-value" id="stat-devices">—</div>
+              <div class="stat-change up" id="stat-pending" style="font-size:11px;color:#d29922"></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green"><i class="fas fa-wifi"></i></div>
+            <div class="stat-info">
+              <div class="stat-label">Tráfico Total</div>
+              <div class="stat-value" id="stat-traffic">—</div>
+              <div class="stat-change up"><i class="fas fa-arrow-up"></i> Tiempo real</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple"><i class="fas fa-wave-square"></i></div>
+            <div class="stat-info">
+              <div class="stat-label">Ancho de Banda</div>
+              <div class="stat-value" id="stat-bandwidth">—</div>
+              <div class="stat-change up"><i class="fas fa-arrow-up"></i> Tiempo real</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon yellow"><i class="fas fa-triangle-exclamation"></i></div>
+            <div class="stat-info">
+              <div class="stat-label">Alertas Activas</div>
+              <div class="stat-value" id="stat-alerts">—</div>
+              <div class="stat-change up"><i class="fas fa-arrow-up"></i> Tiempo real</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="charts-row">
+
+          <!-- Traffic line chart -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Tráfico de Red</div>
+                <div class="card-title-sub">Mbps en tiempo real — entrada y salida</div>
+              </div>
+              <button class="chart-btn active">En vivo</button>
+            </div>
+            <div class="card-body" style="height:210px">
+              <canvas id="trafficChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Protocol distribution donut -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Distribución de Tráfico</div>
+                <div class="card-title-sub">Por protocolo — enviado por analyzer</div>
+              </div>
+            </div>
+            <div class="card-body" style="position:relative">
+              <div style="height:150px;position:relative">
+                <canvas id="donutChart"></canvas>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none">
+                  <div id="donut-center-val" style="font-size:14px;font-weight:700;color:#e6edf3;font-family:'Roboto Mono',monospace">—</div>
+                  <div style="font-size:10px;color:#484f58;font-family:'Roboto Mono',monospace">paquetes</div>
+                </div>
+              </div>
+              <!-- Legend HTTP / TCP / UDP / Otros -->
+              <div class="donut-legend">
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#4493f8"></div>
+                  <span class="legend-name">HTTP</span>
+                  <span class="legend-pct" id="legend-http" style="color:#4493f8">—</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#3fb950"></div>
+                  <span class="legend-name">TCP</span>
+                  <span class="legend-pct" id="legend-tcp" style="color:#3fb950">—</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#d29922"></div>
+                  <span class="legend-name">UDP</span>
+                  <span class="legend-pct" id="legend-udp" style="color:#d29922">—</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#484f58"></div>
+                  <span class="legend-name">Otros</span>
+                  <span class="legend-pct" id="legend-other" style="color:#8b949e">—</span>
+                </div>
+              </div>
+              <div id="legend-total" style="font-size:10px;color:#484f58;font-family:'Roboto Mono',monospace;margin-top:6px;text-align:right"></div>
+            </div>
+          </div>
+
+        </div><!-- /charts-row -->
+
+        <!-- Bottom row -->
+        <div class="bottom-row">
+
+          <!-- Devices mini table -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Dispositivos Detectados</div>
+                <div class="card-title-sub">Desde la API Flask — en vivo</div>
+              </div>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>MAC</th><th>IP</th><th>Timestamp</th><th>Estado</th><th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="devices-tbody">
+                  <tr><td colspan="5" style="text-align:center;padding:24px;color:#484f58;font-size:12px">Conectando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <a class="view-all" data-goto="devices" href="#">
+              <i class="fas fa-arrow-right"></i> Ver todos los dispositivos
+            </a>
+          </div>
+
+          <!-- Alerts panel -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Resumen de Alertas</div>
+                <div class="card-title-sub">Eventos de seguridad recientes</div>
+              </div>
+            </div>
+            <div class="alerts-list" id="alerts-panel">
+              <div style="padding:20px;text-align:center;color:#484f58;font-size:12px">Conectando...</div>
+            </div>
+            <a class="view-all" data-goto="alerts" href="#">
+              <i class="fas fa-arrow-right"></i> Ver todas las alertas
+            </a>
+          </div>
+
+        </div><!-- /bottom-row -->
+      </section>
+
+      <!-- ═══════════════════════ DEVICES ═══════════════════════ -->
+      <section class="page-section" id="section-devices">
+        <div class="filter-bar">
+          <div class="search-wrap">
+            <i class="fas fa-search"></i>
+            <input type="text" class="search-input" id="device-search"
+                   placeholder="Buscar MAC, IP..." oninput="filterDevicesTable()" />
+          </div>
+          <button class="filter-btn active" data-dev-filter="all"
+                  onclick="filterDevicesByStatus('all')">
+            <i class="fas fa-list"></i> Todos
+          </button>
+          <button class="filter-btn" data-dev-filter="approved"
+                  onclick="filterDevicesByStatus('approved')">
+            <i class="fas fa-check-circle"></i> Autorizados
+          </button>
+          <button class="filter-btn" data-dev-filter="pending"
+                  onclick="filterDevicesByStatus('pending')" style="color:#d29922">
+            <i class="fas fa-clock"></i> Pendientes
+          </button>
+          <button class="filter-btn" data-dev-filter="ignored"
+                  onclick="filterDevicesByStatus('ignored')">
+            <i class="fas fa-ban"></i> Ignorados
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Todos los Dispositivos</div>
+              <div class="card-title-sub">Detectados por el analizador de red</div>
+            </div>
+            <div class="conn-bar" style="font-size:11px">
+              <span class="live-indicator"></span> En vivo
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>MAC</th><th>IP</th><th>Timestamp</th><th>Estado</th><th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="devices-tbody-full">
+                <tr><td colspan="5" style="text-align:center;padding:24px;color:#484f58;font-size:12px">Conectando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════ ALERTS ═══════════════════════ -->
+      <section class="page-section" id="section-alerts">
+        <div class="filter-bar">
+          <div class="search-wrap">
+            <i class="fas fa-search"></i>
+            <input type="text" class="search-input" id="alert-search"
+                   placeholder="Buscar alerta, IP..." oninput="filterAlertsTable()" />
+          </div>
+          <button class="filter-btn active" data-alert-filter="ALL"
+                  onclick="filterAlertsByType('ALL')"><i class="fas fa-list"></i> Todas</button>
+          <button class="filter-btn" data-alert-filter="DOS_ATTACK"
+                  onclick="filterAlertsByType('DOS_ATTACK')" style="color:#f85149">
+            <i class="fas fa-bolt"></i> DoS</button>
+          <button class="filter-btn" data-alert-filter="SYN_FLOOD"
+                  onclick="filterAlertsByType('SYN_FLOOD')" style="color:#d29922">
+            <i class="fas fa-water"></i> SYN Flood</button>
+          <button class="filter-btn" data-alert-filter="PORT_SCAN"
+                  onclick="filterAlertsByType('PORT_SCAN')" style="color:#a371f7">
+            <i class="fas fa-magnifying-glass"></i> Port Scan</button>
+          <button class="filter-btn" data-alert-filter="NEW_DEVICE"
+                  onclick="filterAlertsByType('NEW_DEVICE')" style="color:#4493f8">
+            <i class="fas fa-satellite-dish"></i> Nuevo Dispositivo</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Registro de Alertas</div>
+              <div class="card-title-sub">Eventos de seguridad detectados</div>
+            </div>
+            <div class="conn-bar" style="font-size:11px">
+              <span class="live-indicator"></span> En vivo
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tipo</th><th>IP Origen</th><th>Detalle</th><th>Timestamp</th><th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="alerts-tbody">
+                <tr><td colspan="5" style="text-align:center;padding:24px;color:#484f58;font-size:12px">Conectando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /page-content -->
+  </main>
+</div>
+
+<!-- Scripts -->
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/filters.js"></script>
+
+<script>
+function showApiInfo() {
+  Swal.fire({
+    background: '#1c2128', color: '#e6edf3',
+    title: 'Configuración API Flask',
+    html: `
+      <div style="font-size:13px;color:#8b949e;text-align:left">
+        <div style="background:#161b22;padding:12px;border-radius:6px;border:1px solid #30363d;
+                    font-family:monospace;line-height:2.2">
+          <div><span style="color:#484f58">Host:</span>  <span style="color:#4493f8">localhost</span></div>
+          <div><span style="color:#484f58">HTTP:</span>  <span style="color:#3fb950">5000</span></div>
+          <div><span style="color:#484f58">TCP:</span>   <span style="color:#4493f8">8080</span></div>
+          <div><span style="color:#484f58">UDP:</span>   <span style="color:#a371f7">9090</span></div>
+          <div><span style="color:#484f58">Poll:</span>  <span style="color:#d29922">3 segundos</span></div>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:#484f58">
+          pip install psutil flask-cors<br>
+          python analyzer.py --mode log --file capture.log
+        </div>
+      </div>`,
+    confirmButtonText: 'Cerrar',
+    confirmButtonColor: '#4493f8',
+  });
+}
+</script>
+
+</body>
+</html>

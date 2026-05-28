@@ -5,15 +5,15 @@
 // CONFIGURACION WIFI
 // ===============================
 
-const char* ssid = "Megacable_2.4G_D486";
-const char* password = "D4Uph4uq";
+const char* ssid = "POCO F7";
+const char* password = "12345678";
 
 // ===============================
 // IP ESTATICA DEL ESP32
 // ===============================
 
-IPAddress local_IP(192,168,1,12);
-IPAddress gateway(192,168,1,1);
+IPAddress local_IP(10,129,176,12);
+IPAddress gateway(10,129,176,232);
 IPAddress subnet(255,255,255,0);
 
 // ===============================
@@ -21,7 +21,7 @@ IPAddress subnet(255,255,255,0);
 // ===============================
 
 // IP DE TU LAPTOP
-const char* host = "192.168.1.2";
+const char* host = "10.129.176.217";
 
 // PUERTO UDP
 const uint16_t udpPort = 9090;
@@ -77,7 +77,7 @@ void loop() {
   // Crear JSON
   String json = "{";
   json += "\"device\":\"LIGHT_SENSOR\",";
-  json += "\"ip\":\"192.168.1.12\",";
+  json += "\"ip\":\"10.129.176.217\",";
   json += "\"light\":" + String(luz);
   json += "}";
 
