@@ -14,7 +14,7 @@ DEVICE_URL     = f"{SERVER_URL}/device"
 PROTO_STAT_URL = f"{SERVER_URL}/protocol-stats"
 
 # Umbrales de detección
-DOS_THRESHOLD       = 100
+DOS_THRESHOLD       = 200
 DOS_WINDOW          = 5
 
 SYN_THRESHOLD       = 50
@@ -23,8 +23,8 @@ SYN_WINDOW          = 5
 PORT_SCAN_THRESHOLD = 10
 PORT_SCAN_WINDOW    = 5
 
-ALERT_COOLDOWN      = 15    # segundos entre alertas del mismo tipo/IP
-STATS_INTERVAL      = 5     # segundos entre envío de stats de protocolo
+ALERT_COOLDOWN      = 15    # segundos entre alertas
+STATS_INTERVAL      = 5     # segundos entre envío
 # DEFAULT_LOG         = "capture.log"
 DEFAULT_LOG = "logs/capture.log"
 
